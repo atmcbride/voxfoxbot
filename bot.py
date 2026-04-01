@@ -7,6 +7,9 @@ The bot must be added as an administrator of the target channel with
 "Post Messages" permission. It listens for voice messages in both channels
 and direct messages.
 
+Configuration is global (single settings.json) — use commands in DM to
+configure; settings apply to all chats including the channel.
+
 Usage:
     TELEGRAM_BOT_TOKEN=<token> python bot.py
 """
@@ -46,9 +49,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not message or not message.voice:
         return
 
-    chat_id = message.chat_id
-    cfg = config.get(chat_id)
-    log.info("Voice message received in chat %d (%.1fs)", chat_id, message.voice.duration)
+    cfg = config.get()
+    log.info("Voice message received (%.1fs)", message.voice.duration)
 
     status = await message.reply_text("Processing spectrogram...")
     t_start = time.monotonic()
@@ -99,7 +101,7 @@ async def cmd_setrange(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if fmin >= fmax:
             await message.reply_text("fmin must be less than fmax.")
             return
-        config.update(message.chat_id, fmin=fmin, fmax=fmax)
+        config.update(fmin=fmin, fmax=fmax)
         await message.reply_text(f"Frequency range set to {fmin}–{fmax} Hz.")
     except (IndexError, ValueError):
         await message.reply_text("Usage: /setrange <fmin_hz> <fmax_hz>\nExample: /setrange 80 8000")
@@ -110,17 +112,17 @@ async def cmd_addmarker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         freq = float(context.args[0])
         label = " ".join(context.args[1:]) if len(context.args) > 1 else f"{freq:.0f} Hz"
-        cfg = config.get(message.chat_id)
+        cfg = config.get()
         markers = cfg["markers"]
         markers.append({"freq": freq, "label": label})
-        config.update(message.chat_id, markers=markers)
+        config.update(markers=markers)
         await message.reply_text(f"Marker added: '{label}' at {freq} Hz.")
     except (IndexError, ValueError):
         await message.reply_text("Usage: /addmarker <freq_hz> [label]\nExample: /addmarker 1000 1kHz")
 
 
 async def cmd_clearmarkers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    config.update(update.effective_message.chat_id, markers=[])
+    config.update(markers=[])
     await update.effective_message.reply_text("All markers cleared.")
 
 
@@ -128,7 +130,7 @@ async def cmd_setcolormap(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     message = update.effective_message
     try:
         cmap = context.args[0]
-        config.update(message.chat_id, colormap=cmap)
+        config.update(colormap=cmap)
         await message.reply_text(
             f"Colormap set to '{cmap}'.\n"
             "Common options: magma, inferno, viridis, plasma, cividis, turbo"
@@ -140,26 +142,25 @@ async def cmd_setcolormap(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def cmd_config(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    message = update.effective_message
-    cfg = config.get(message.chat_id)
+    cfg = config.get()
     marker_lines = "\n".join(
         f"  • {m['freq']} Hz — {m['label']}" for m in cfg["markers"]
     ) or "  (none)"
     text = (
-        f"Current settings for this chat:\n"
+        f"Current settings:\n"
         f"  Freq range: {cfg['fmin']}–{cfg['fmax']} Hz\n"
         f"  Colormap:   {cfg['colormap']}\n"
         f"  FPS:        {cfg['fps']}\n"
         f"  Markers:\n{marker_lines}"
     )
-    await message.reply_text(text)
+    await update.effective_message.reply_text(text)
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(
         "VoxFox — voice message spectrograph bot\n\n"
         "Send or forward a voice message and I'll reply with an animated spectrogram video.\n\n"
-        "Commands:\n"
+        "Commands (use in DM — settings apply globally):\n"
         "  /config               — show current settings\n"
         "  /setrange <min> <max> — set frequency range in Hz\n"
         "  /addmarker <hz> [lbl] — add a horizontal reference line\n"
@@ -180,8 +181,7 @@ def main() -> None:
 
     app = Application.builder().token(token).build()
 
-    voice_filter = filters.VOICE
-    app.add_handler(MessageHandler(voice_filter, handle_voice))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 
     app.add_handler(CommandHandler("setrange", cmd_setrange))
     app.add_handler(CommandHandler("addmarker", cmd_addmarker))

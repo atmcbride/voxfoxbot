@@ -1,0 +1,6 @@
+token.txt
+settings.json
+venv/
+__pycache__/
+*.pyc
+.DS_Store

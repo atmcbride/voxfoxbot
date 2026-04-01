@@ -4,7 +4,7 @@ from pathlib import Path
 SETTINGS_FILE = Path(__file__).parent / "settings.json"
 
 DEFAULTS: dict = {
-    "fmin": 80,
+    "fmin": 70,
     "fmax": 4000,
     "colormap": "magma",
     "fps": 30,
@@ -28,18 +28,12 @@ def _save(data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
-def get(chat_id: int) -> dict:
-    data = _load()
-    stored = data.get(str(chat_id), {})
-    # Merge stored markers separately to avoid clobbering defaults
-    result = {**DEFAULTS, **stored}
-    return result
+def get() -> dict:
+    stored = _load()
+    return {**DEFAULTS, **stored}
 
 
-def update(chat_id: int, **kwargs) -> None:
-    data = _load()
-    key = str(chat_id)
-    current = data.get(key, {})
+def update(**kwargs) -> None:
+    current = _load()
     current.update(kwargs)
-    data[key] = current
-    _save(data)
+    _save(current)
