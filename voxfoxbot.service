@@ -1,0 +1,14 @@
+[Unit]
+Description=VoxFox Telegram Bot
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/voxfoxbot
+ExecStart=/home/ubuntu/voxfoxbot/venv/bin/python bot.py
+EnvironmentFile=/home/ubuntu/voxfoxbot/.env
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

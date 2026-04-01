@@ -48,4 +48,4 @@ jobs:
             -e "ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no" \
             ./ "ubuntu@${{ steps.ip.outputs.host }}:~/voxfoxbot/"
           ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no "ubuntu@${{ steps.ip.outputs.host }}" \
-            'cd ~/voxfoxbot && source venv/bin/activate && sudo systemctl restart voxfoxbot || echo "no systemd service yet"'
+            'sudo cp ~/voxfoxbot/voxfoxbot.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now voxfoxbot && sudo systemctl restart voxfoxbot'
