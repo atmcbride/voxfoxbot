@@ -187,10 +187,24 @@ resource "aws_iam_role_policy" "ci_ec2" {
         Sid    = "SecurityGroupCreate"
         Effect = "Allow"
         Action = "ec2:CreateSecurityGroup"
-        Resource = "*"
+        Resource = [
+          "arn:aws:ec2:us-east-1:*:security-group/*",
+          "arn:aws:ec2:us-east-1:*:vpc/*",
+        ]
         Condition = {
           StringEquals = {
             "aws:RequestTag/Project" = "voxfoxbot"
+          }
+        }
+      },
+      {
+        Sid    = "SecurityGroupCreateTags"
+        Effect = "Allow"
+        Action = "ec2:CreateTags"
+        Resource = "arn:aws:ec2:us-east-1:*:security-group/*"
+        Condition = {
+          StringEquals = {
+            "ec2:CreateAction" = "CreateSecurityGroup"
           }
         }
       },
