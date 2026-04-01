@@ -44,10 +44,24 @@ The CI role (`voxfoxbot-ci`) is scoped to:
 ## Connect
 
 ```bash
-ssh -i ~/.ssh/your-key.pem ubuntu@<instance-public-ip>
+ssh ubuntu@<instance-public-ip> -i ~/voxfoxbot.pem
 ```
 
 Public IP is available in the GitHub Actions run output.
+
+## Monitoring
+
+Check if the bot is running:
+
+```bash
+sudo systemctl status voxfoxbot
+```
+
+Follow live logs:
+
+```bash
+sudo journalctl -fu voxfoxbot
+```
 
 ## Tear down
 
