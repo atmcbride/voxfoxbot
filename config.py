@@ -29,16 +29,20 @@ def _save(data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
-def get() -> dict:
+def get(chat_id: int) -> dict:
     stored = _load()
-    return {**DEFAULTS, **stored}
+    chat_cfg = stored.get("chats", {}).get(str(chat_id), {})
+    return {**DEFAULTS, **chat_cfg}
 
 
-def update(**kwargs) -> None:
-    current = _load()
-    current.update(kwargs)
-    _save(current)
+def update(chat_id: int, **kwargs) -> None:
+    data = _load()
+    chats = data.setdefault("chats", {})
+    chats.setdefault(str(chat_id), {}).update(kwargs)
+    _save(data)
 
 
-def reset() -> None:
-    _save({})
+def reset(chat_id: int) -> None:
+    data = _load()
+    data.get("chats", {}).pop(str(chat_id), None)
+    _save(data)

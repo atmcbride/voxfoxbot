@@ -10,8 +10,8 @@ The bot must be added as an administrator of the target channel with
   - /vox replied to any of the above
   - @voxfoxbot mention in a reply to any of the above
 
-Configuration is global (single settings.json) — use commands in DM to
-configure; settings apply to all chats including the channel.
+Configuration is per-chat (settings.json keyed by chat_id) — use commands
+in any chat to configure settings for that chat.
 
 Usage:
     TELEGRAM_BOT_TOKEN=<token> python bot.py
@@ -179,7 +179,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     message = update.effective_message
     if not message:
         return
-    cfg = config.get()
+    cfg = config.get(update.effective_chat.id)
     if not cfg.get("auto_spectrogram", True):
         return
     log.info("Voice message received (%.1fs)", message.voice.duration)
@@ -190,7 +190,7 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     message = update.effective_message
     if not message:
         return
-    cfg = config.get()
+    cfg = config.get(update.effective_chat.id)
     if not cfg.get("auto_spectrogram", True):
         return
     log.info("Audio file received")
@@ -201,7 +201,7 @@ async def handle_audio_document(update: Update, context: ContextTypes.DEFAULT_TY
     message = update.effective_message
     if not message:
         return
-    cfg = config.get()
+    cfg = config.get(update.effective_chat.id)
     if not cfg.get("auto_spectrogram", True):
         return
     log.info("Audio document received")
@@ -230,7 +230,7 @@ async def cmd_vox(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     log.info("/vox triggered on replied-to message")
-    await _process_message_audio(target, message, config.get(), context.bot)
+    await _process_message_audio(target, message, config.get(update.effective_chat.id), context.bot)
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +245,7 @@ async def cmd_setrange(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if fmin >= fmax:
             await message.reply_text("fmin must be less than fmax.")
             return
-        config.update(fmin=fmin, fmax=fmax)
+        config.update(update.effective_chat.id, fmin=fmin, fmax=fmax)
         await message.reply_text(f"Frequency range set to {fmin}–{fmax} Hz.")
     except (IndexError, ValueError):
         await message.reply_text("Usage: /setrange <fmin_hz> <fmax_hz>\nExample: /setrange 80 8000")
@@ -256,17 +256,18 @@ async def cmd_addmarker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         freq = float(context.args[0])
         label = " ".join(context.args[1:]) if len(context.args) > 1 else f"{freq:.0f} Hz"
-        cfg = config.get()
+        chat_id = update.effective_chat.id
+        cfg = config.get(chat_id)
         markers = cfg["markers"]
         markers.append({"freq": freq, "label": label})
-        config.update(markers=markers)
+        config.update(chat_id, markers=markers)
         await message.reply_text(f"Marker added: '{label}' at {freq} Hz.")
     except (IndexError, ValueError):
         await message.reply_text("Usage: /addmarker <freq_hz> [label]\nExample: /addmarker 1000 1kHz")
 
 
 async def cmd_clearmarkers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    config.update(markers=[])
+    config.update(update.effective_chat.id, markers=[])
     await update.effective_message.reply_text("All markers cleared.")
 
 
@@ -274,7 +275,7 @@ async def cmd_setcolormap(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     message = update.effective_message
     try:
         cmap = context.args[0]
-        config.update(colormap=cmap)
+        config.update(update.effective_chat.id, colormap=cmap)
         await message.reply_text(
             f"Colormap set to '{cmap}'.\n"
             "Common options: magma, inferno, viridis, plasma, cividis, turbo"
@@ -286,9 +287,10 @@ async def cmd_setcolormap(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def cmd_toggleauto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    cfg = config.get()
+    chat_id = update.effective_chat.id
+    cfg = config.get(chat_id)
     new_value = not cfg.get("auto_spectrogram", True)
-    config.update(auto_spectrogram=new_value)
+    config.update(chat_id, auto_spectrogram=new_value)
     state = "ON" if new_value else "OFF"
     await update.effective_message.reply_text(
         f"Auto-spectrogram is now {state}.\n"
@@ -298,7 +300,7 @@ async def cmd_toggleauto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    config.reset()
+    config.reset(update.effective_chat.id)
     await update.effective_message.reply_text(
         "Settings reset to defaults.\n"
         "  Freq range: 70–4000 Hz\n"
@@ -309,7 +311,7 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_config(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    cfg = config.get()
+    cfg = config.get(update.effective_chat.id)
     marker_lines = "\n".join(
         f"  • {m['freq']} Hz — {m['label']}" for m in cfg["markers"]
     ) or "  (none)"
@@ -336,7 +338,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "    (when auto-spectrogram is ON)\n"
         "  • Reply to any audio message with /vox\n"
         "  • Reply to any audio message and @mention the bot\n\n"
-        "Commands (use in DM — settings apply globally):\n"
+        "Commands (settings apply per-chat):\n"
         "  /vox                  — run on a replied-to audio message\n"
         "  /toggleauto           — toggle automatic spectrogram on/off\n"
         "  /config               — show current settings\n"
