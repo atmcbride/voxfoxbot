@@ -111,15 +111,16 @@ def render_base_image(
         freq = marker["freq"]
         label = marker["label"]
         if fmin <= freq <= fmax:
-            ax.axhline(y=freq, color="white", alpha=0.5, linestyle="--", linewidth=0.8)
+            ax.axhline(y=freq, color="white", linestyle="--", linewidth=1.5, zorder=10)
             ax.text(
                 times[0] + (times[-1] - times[0]) * 0.005,
                 freq,
                 label,
                 color="white",
                 va="bottom",
-                fontsize=7,
-                alpha=0.85,
+                fontsize=9,
+                fontweight="bold",
+                zorder=11,
             )
 
     # Draw the canvas so matplotlib finalises layout before we read positions

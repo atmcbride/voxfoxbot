@@ -5,10 +5,14 @@ SETTINGS_FILE = Path(__file__).parent / "settings.json"
 
 DEFAULTS: dict = {
     "fmin": 80,
-    "fmax": 8000,
+    "fmax": 4000,
     "colormap": "magma",
     "fps": 30,
-    "markers": [],  # list of {"freq": float, "label": str}
+    "markers": [
+        {"freq": 74.42, "label": "D2"},
+        {"freq": 164.81, "label": "E3"},
+        {"freq": 293.66, "label": "D4"},
+    ],
 }
 
 

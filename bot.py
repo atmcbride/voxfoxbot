@@ -14,6 +14,7 @@ Usage:
 import logging
 import os
 import tempfile
+import time
 
 from telegram import Update
 from telegram.ext import (
@@ -50,6 +51,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     log.info("Voice message received in chat %d (%.1fs)", chat_id, message.voice.duration)
 
     status = await message.reply_text("Processing spectrogram...")
+    t_start = time.monotonic()
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -71,10 +73,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 cfg["fps"],
             )
 
+            elapsed = time.monotonic() - t_start
             with open(output_path, "rb") as f:
                 await message.reply_video(
                     video=f,
-                    caption=f"Spectrogram · {cfg['fmin']}–{cfg['fmax']} Hz",
+                    caption=f"Spectrogram · {cfg['fmin']}–{cfg['fmax']} Hz · processed in {elapsed:.1f}s",
                 )
 
         await status.delete()
