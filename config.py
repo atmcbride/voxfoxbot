@@ -9,6 +9,7 @@ DEFAULTS: dict = {
     "colormap": "magma",
     "fps": 30,
     "auto_spectrogram": True,
+    "linear_scale": False,
     "markers": [
         {"freq": 74.42, "label": "D2"},
         {"freq": 164.81, "label": "E3"},

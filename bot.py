@@ -57,11 +57,15 @@ _MIME_TO_EXT: dict[str, str] = {
     "audio/mp4": ".m4a",
     "audio/x-m4a": ".m4a",
     "audio/aac": ".aac",
-    "video/mp4": ".mp4",   # video_note container
+    "video/mp4": ".mp4",
     "video/webm": ".webm",
+    "video/quicktime": ".mov",
+    "video/x-matroska": ".mkv",
+    "video/x-msvideo": ".avi",
 }
 
 _AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".webm"}
+_VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 
 
 def _audio_from_message(message: Message) -> tuple[str, str] | None:
@@ -84,6 +88,10 @@ def _audio_from_message(message: Message) -> tuple[str, str] | None:
     if message.video_note:
         return message.video_note.file_id, ".mp4"
 
+    if message.video:
+        ext = _MIME_TO_EXT.get(message.video.mime_type or "", ".mp4")
+        return message.video.file_id, ext
+
     if message.document:
         mime = message.document.mime_type or ""
         if mime.startswith("audio/") or mime.startswith("video/"):
@@ -91,7 +99,7 @@ def _audio_from_message(message: Message) -> tuple[str, str] | None:
             return message.document.file_id, ext
         # Fall back to filename extension for files with missing/generic MIME types
         name = (message.document.file_name or "").lower()
-        for suffix in _AUDIO_EXTENSIONS:
+        for suffix in (*_AUDIO_EXTENSIONS, *_VIDEO_EXTENSIONS):
             if name.endswith(suffix):
                 return message.document.file_id, suffix
 
@@ -197,6 +205,17 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await _process_message_audio(message, message, cfg, context.bot)
 
 
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    cfg = config.get(update.effective_chat.id)
+    if not cfg.get("auto_spectrogram", True):
+        return
+    log.info("Video file received")
+    await _process_message_audio(message, message, cfg, context.bot)
+
+
 async def handle_audio_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if not message:
@@ -299,14 +318,24 @@ async def cmd_toggleauto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
+async def cmd_togglescale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    cfg = config.get(chat_id)
+    new_value = not cfg.get("linear_scale", False)
+    config.update(chat_id, linear_scale=new_value)
+    scale = "linear" if new_value else "logarithmic"
+    await update.effective_message.reply_text(f"Frequency scale set to {scale}.")
+
+
 async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     config.reset(update.effective_chat.id)
     await update.effective_message.reply_text(
         "Settings reset to defaults.\n"
-        "  Freq range: 70–4000 Hz\n"
-        "  Colormap:   magma\n"
+        "  Freq range:       70–4000 Hz\n"
+        "  Colormap:         magma\n"
         "  Auto-spectrogram: ON\n"
-        "  Markers: D2, E3, D4"
+        "  Freq scale:       logarithmic\n"
+        "  Markers:          D2, E3, D4"
     )
 
 
@@ -316,12 +345,14 @@ async def cmd_config(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"  • {m['freq']} Hz — {m['label']}" for m in cfg["markers"]
     ) or "  (none)"
     auto = "ON" if cfg.get("auto_spectrogram", True) else "OFF"
+    scale = "linear" if cfg.get("linear_scale", False) else "logarithmic"
     text = (
         f"Current settings:\n"
         f"  Freq range:      {cfg['fmin']}–{cfg['fmax']} Hz\n"
         f"  Colormap:        {cfg['colormap']}\n"
         f"  FPS:             {cfg['fps']}\n"
         f"  Auto-spectrogram:{auto}\n"
+        f"  Freq scale:      {scale}\n"
         f"  Markers:\n{marker_lines}"
     )
     await update.effective_message.reply_text(text)
@@ -330,17 +361,19 @@ async def cmd_config(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(
         "VoxFox — voice message spectrograph bot\n\n"
-        "Supported audio:\n"
+        "Supported input:\n"
         "  • Voice messages (OGG/Opus)\n"
-        "  • Audio files: MP3, WAV, FLAC, M4A, AAC, OGG\n\n"
+        "  • Audio files: MP3, WAV, FLAC, M4A, AAC, OGG\n"
+        "  • Video files: MP4, MOV, MKV, AVI, WebM (audio extracted)\n\n"
         "How to trigger:\n"
-        "  • Send/forward any supported audio — bot replies automatically\n"
+        "  • Send/forward any supported audio or video — bot replies automatically\n"
         "    (when auto-spectrogram is ON)\n"
-        "  • Reply to any audio message with /vox\n"
-        "  • Reply to any audio message and @mention the bot\n\n"
+        "  • Reply to any audio/video message with /vox\n"
+        "  • Reply to any audio/video message and @mention the bot\n\n"
         "Commands (settings apply per-chat):\n"
-        "  /vox                  — run on a replied-to audio message\n"
+        "  /vox                  — run on a replied-to audio/video message\n"
         "  /toggleauto           — toggle automatic spectrogram on/off\n"
+        "  /togglescale          — toggle frequency axis: logarithmic / linear\n"
         "  /config               — show current settings\n"
         "  /reset                — reset all settings to defaults\n"
         "  /setrange <min> <max> — set frequency range in Hz\n"
@@ -402,6 +435,7 @@ def main() -> None:
     _CHANNEL_COMMAND_DISPATCH.update({
         "vox": cmd_vox,
         "toggleauto": cmd_toggleauto,
+        "togglescale": cmd_togglescale,
         "reset": cmd_reset,
         "setrange": cmd_setrange,
         "addmarker": cmd_addmarker,
@@ -412,9 +446,10 @@ def main() -> None:
         "start": cmd_help,
     })
 
-    # Direct audio — fires when the message itself contains audio
+    # Direct audio/video — fires when the message itself contains audio or video
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(MessageHandler(filters.AUDIO, handle_audio))
+    app.add_handler(MessageHandler(filters.VIDEO, handle_video))
     app.add_handler(
         MessageHandler(
             filters.Document.FileExtension("mp3")
@@ -422,7 +457,11 @@ def main() -> None:
             | filters.Document.FileExtension("flac")
             | filters.Document.FileExtension("m4a")
             | filters.Document.FileExtension("aac")
-            | filters.Document.FileExtension("ogg"),
+            | filters.Document.FileExtension("ogg")
+            | filters.Document.FileExtension("mp4")
+            | filters.Document.FileExtension("mov")
+            | filters.Document.FileExtension("mkv")
+            | filters.Document.FileExtension("avi"),
             handle_audio_document,
         )
     )
@@ -438,6 +477,7 @@ def main() -> None:
 
     # Config commands
     app.add_handler(CommandHandler("toggleauto", cmd_toggleauto))
+    app.add_handler(CommandHandler("togglescale", cmd_togglescale))
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("setrange", cmd_setrange))
     app.add_handler(CommandHandler("addmarker", cmd_addmarker))

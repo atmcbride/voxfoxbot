@@ -92,7 +92,10 @@ def render_base_image(
         rasterized=True,
     )
 
-    ax.set_yscale("log")
+    if cfg.get("linear_scale", False):
+        ax.set_yscale("linear")
+    else:
+        ax.set_yscale("log")
     ax.set_ylim(fmin, fmax)
     ax.set_xlim(times[0], times[-1])
     ax.tick_params(colors="white")
