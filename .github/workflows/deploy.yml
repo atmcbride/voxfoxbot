@@ -32,3 +32,20 @@ jobs:
         env:
           TF_VAR_key_name: ${{ secrets.KEY_NAME }}
           TF_VAR_tg_bot_token: ${{ secrets.TG_BOT_TOKEN }}
+
+      - name: Get instance IP
+        id: ip
+        run: echo "host=$(tofu output -raw public_ip)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to instance
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/key.pem
+          chmod 600 ~/.ssh/key.pem
+          rsync -avz --exclude '.git' --exclude 'venv' --exclude '__pycache__' --exclude '.terraform' --exclude '*.tfstate*' --exclude 'terraform.tfvars' --exclude 'bootstrap' \
+            -e "ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no" \
+            ./ "ubuntu@${{ steps.ip.outputs.host }}:~/voxfoxbot/"
+          ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no "ubuntu@${{ steps.ip.outputs.host }}" \
+            'cd ~/voxfoxbot && source venv/bin/activate && sudo systemctl restart voxfoxbot || echo "no systemd service yet"'
