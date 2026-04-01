@@ -191,11 +191,6 @@ resource "aws_iam_role_policy" "ci_ec2" {
           "arn:aws:ec2:us-east-1:*:security-group/*",
           "arn:aws:ec2:us-east-1:*:vpc/*",
         ]
-        Condition = {
-          StringEquals = {
-            "aws:RequestTag/Project" = "voxfoxbot"
-          }
-        }
       },
       {
         Sid    = "SecurityGroupCreateTags"
