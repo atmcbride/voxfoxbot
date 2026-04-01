@@ -1,0 +1,222 @@
+# VoxFox Bot — Brainstorm
+Date: 2026-03-31
+
+## What We're Building
+A Telegram bot that listens to a channel for voice messages, generates animated
+spectrograph videos from them, and replies to the original message with the video.
+The bot should be configurable (frequency range, y-axis annotations, color palette, etc.)
+
+---
+
+## How Telegram Bots Work (Quick Primer)
+
+Telegram bots are server-side programs that talk to Telegram via the Bot API.
+Here's the basic mental model:
+
+1. You create a bot via @BotFather on Telegram — it gives you a token.
+2. Your program polls Telegram for updates (or uses a webhook to receive them).
+3. When a voice message appears, the API gives you a file_id you can use to
+   download the audio.
+4. You process the audio, generate a video, and call sendVideo (or sendAnimation)
+   to post it as a reply.
+
+For a channel specifically: the bot must be added as an *administrator* of the
+channel. Without admin rights, it can't see messages or post replies.
+
+Relevant bot permissions needed:
+  - Read messages (implicit once added as admin)
+  - Post messages / media
+
+Two update delivery modes:
+  - Long polling: your bot repeatedly asks "any new messages?" — simple, no
+    server infra needed, fine for low-volume use.
+  - Webhooks: Telegram pushes updates to your HTTPS endpoint — more production-
+    grade, requires a public URL (e.g. via ngrok in dev, or a VPS/cloud function
+    in prod).
+
+For a personal channel with occasional voice messages, long polling is totally
+fine and much simpler to set up.
+
+---
+
+## Tech Stack Options
+
+### Language
+Python is the most natural choice:
+  - python-telegram-bot (async, well-maintained) or pyTelegramBotAPI (simpler)
+  - Rich scientific audio/viz ecosystem: librosa, scipy, matplotlib, numpy
+
+### Core Libraries
+  - Audio download: Telegram Bot API (file download endpoint)
+  - Audio decoding: pydub or soundfile (Telegram sends OGG/Opus format)
+  - Spectrogram computation: librosa (mel spectrogram, STFT) or scipy.signal
+  - Visualization: matplotlib or a custom renderer with PIL/Pillow
+  - Video assembly: moviepy or ffmpeg (via subprocess / ffmpeg-python)
+  - Animated GIF (alternative to video): PIL/Pillow ImageSequence
+
+### Spectrograph Video: Two Approaches
+
+Option A — Static image sent as photo
+  - Simplest. Render the full spectrogram as a PNG and send it.
+  - No animation, but instant and reliable.
+
+Option B — Animated video (scrolling or time-synced)
+  - Render frames where a vertical "playhead" line sweeps across the spectrogram
+    in sync with the audio duration.
+  - Combine frames + audio into an MP4 using ffmpeg/moviepy.
+  - More impressive, and the audio actually plays alongside the visual.
+  - Telegram supports sending video with audio natively via sendVideo.
+
+Option C — Animated GIF (no audio)
+  - Middle ground: animated spectrogram without audio track.
+  - Telegram renders GIFs inline. No sound though.
+
+Recommendation: start with Option A (static PNG) to validate the pipeline,
+then upgrade to Option B (MP4 with audio) once the core works.
+
+---
+
+## Spectrograph Technical Decisions
+
+### Spectrogram Type
+
+A "sliding FFT" IS an STFT — Short-Time Fourier Transform. You slide a window
+along the audio, compute an FFT at each step, and stack the columns. The three
+main variants differ in how they handle the frequency axis and window sizing:
+
+STFT (what we're doing)
+  - Linear frequency axis by default
+  - Fixed window size everywhere: one tradeoff between time and freq resolution
+  - Log-scale the y-axis in matplotlib to make it look like CQT without extra cost
+  - Best for precise frequency readout and scientific annotation
+
+Mel Spectrogram
+  - Same underlying sliding FFT, but y-axis is warped to match human hearing
+  - Low freqs get more vertical space; high freqs are compressed
+  - Looks richer for voice content, hides dead space in upper register
+  - Applied as a filterbank transform after the STFT
+
+Constant-Q Transform (CQT)
+  - Logarithmic frequency axis (each octave = equal vertical space, like a piano)
+  - Window size adapts per frequency band: wide at low freqs (better freq res),
+    narrow at high freqs (better time res) — solves STFT's fixed-window tradeoff
+  - Slower to compute; mostly used for music/pitch analysis
+
+DECISION: STFT + log-scaled y-axis is the move.
+  - Precise frequency readout (good for annotations)
+  - Looks like CQT (log display) without the compute overhead
+  - Use librosa.stft() or scipy.signal.spectrogram(), then plt.yscale('log')
+
+Key STFT parameter to tune — n_fft (window size):
+  - Larger window (e.g. 4096): better frequency resolution, smeared transients
+  - Smaller window (e.g. 512): sharper transients, fuzzy pitch
+  - Good starting point for voice: n_fft=2048, hop_length=512 (75% overlap)
+  - hop_length controls time resolution of the video frames
+
+### Frequency Range
+User should be able to configure:
+  - fmin: minimum frequency shown (e.g. 80 Hz for voice fundamentals)
+  - fmax: maximum frequency shown (e.g. 8000 Hz to capture voice clearly, or
+    20000 Hz for full audible range)
+  Default voice range suggestion: 80 Hz – 8000 Hz
+
+### Y-Axis Annotations
+Custom horizontal lines at specific frequencies, labeled on the y-axis.
+Use cases: mark formant frequencies, fundamental pitch range, speech bands, etc.
+These could be stored per-user or per-channel in a config file or small DB.
+
+Example config:
+  annotations:
+    - freq: 1000
+      label: "1kHz"
+    - freq: 3400
+      label: "voice cutoff"
+
+### Color Maps
+matplotlib colormaps work well: 'magma', 'inferno', 'viridis', 'plasma'
+'magma' is popular for spectrograms (dark background, bright highlights).
+
+---
+
+## Bot Commands Design
+
+/start          — intro message, explain what the bot does
+/help           — list commands
+/config         — show current settings
+/setrange <fmin> <fmax>  — set frequency range in Hz
+                   e.g. /setrange 80 8000
+/addmarker <freq> <label> — add a horizontal annotation line
+                   e.g. /addmarker 1000 "1kHz reference"
+/clearmarkers   — remove all annotation lines
+/setcolormap <name> — set the matplotlib colormap
+/setstyle <static|video|gif> — choose output format
+
+Settings can be stored in a simple JSON or SQLite file, keyed by chat_id.
+
+---
+
+## Architecture Overview
+
+Bot process (long polling):
+  on_voice_message(update):
+    1. Get file_id from message
+    2. Download OGG/Opus audio from Telegram servers
+    3. Decode to WAV (pydub)
+    4. Compute spectrogram (librosa)
+    5. Render frame(s) with matplotlib (apply fmin/fmax, annotation lines)
+    6. If video mode: assemble MP4 with ffmpeg (frames + original audio)
+    7. Send video/photo as reply to original voice message
+
+State:
+  - settings.json or SQLite: per-chat config (freq range, markers, colormap)
+  - Temp dir: downloaded audio + rendered frames (cleaned up after send)
+
+---
+
+## Channel-Specific Considerations
+
+- Bot must be a channel admin with "Post Messages" permission.
+- Voice messages in channels appear as channel posts, not user messages —
+  the update type is channel_post, not message. Make sure the handler listens
+  for both (python-telegram-bot has channel_post handlers).
+- Replying to a channel post: use reply_to_message_id = original message_id.
+- Telegram file size limits: videos up to 50 MB via Bot API. For long voice
+  messages, the rendered video could be large — may need to compress or cap
+  resolution/fps.
+
+---
+
+## Possible Enhancements (Later)
+
+- Pitch tracking overlay: draw the detected fundamental frequency (f0) as a
+  curve on top of the spectrogram.
+- Multiple color themes: "dark mode", "paper" (white bg for readability).
+- Per-message overrides: reply to a voice message with a command like
+  /spectrogram fmin=200 fmax=4000 to re-render with custom settings.
+- Waveform panel: add a waveform strip above or below the spectrogram.
+- Export to PNG link: besides sending inline, provide a download link.
+- Webhook mode deployment: move to a VPS + webhook for always-on reliability.
+
+---
+
+## Open Questions / Things to Decide
+
+1. Output format preference: static image, animated video with audio, or GIF?
+2. Default frequency range: voice-optimized (80–8k) or full audible (20–20k)?
+3. Where to run the bot: local machine (always-on?), VPS, or cloud function?
+4. Should settings be per-channel or global (since this is a personal channel)?
+5. Should the bot also handle non-channel voice messages (DMs, group chats)?
+
+---
+
+## Getting Started Steps
+
+1. Message @BotFather on Telegram, create a new bot, copy the token.
+2. Add the bot as admin to your channel.
+3. pip install python-telegram-bot pydub librosa matplotlib moviepy ffmpeg-python
+4. Install ffmpeg system binary (brew install ffmpeg on Mac).
+5. Write a minimal bot that just downloads voice messages and logs them.
+6. Add spectrogram rendering (static PNG first).
+7. Add reply logic.
+8. Add command handling for config.
+9. Upgrade to animated video output.
