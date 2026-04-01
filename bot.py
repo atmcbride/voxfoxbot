@@ -355,13 +355,37 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+_CHANNEL_COMMAND_DISPATCH: dict[str, any] = {}  # populated in main() after functions defined
+
+
+async def _handle_channel_post_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Dispatch commands sent as channel posts (CommandHandler ignores channel_post updates)."""
+    msg = update.effective_message
+    if not msg or not msg.text:
+        return
+    parts = msg.text.split()
+    cmd = parts[0].lstrip("/").split("@")[0].lower()
+    context.args = parts[1:]
+    fn = _CHANNEL_COMMAND_DISPATCH.get(cmd)
+    if fn:
+        await fn(update, context)
+
+
 async def post_init(app: Application) -> None:
-    """Register the @mention-reply handler after we know the bot's username."""
+    """Register username-dependent handlers after we know the bot's username."""
     me = await app.bot.get_me()
     log.info("Bot username: @%s", me.username)
+    # @mention-reply in regular group chats
     app.add_handler(
         MessageHandler(
             filters.REPLY & filters.Mention(me.username),
+            cmd_vox,
+        )
+    )
+    # @mention in channel posts
+    app.add_handler(
+        MessageHandler(
+            filters.UpdateType.CHANNEL_POSTS & filters.Mention(me.username),
             cmd_vox,
         )
     )
@@ -373,6 +397,20 @@ def main() -> None:
         raise SystemExit("TELEGRAM_BOT_TOKEN environment variable is not set.")
 
     app = Application.builder().token(token).post_init(post_init).build()
+
+    # Populate channel command dispatch table
+    _CHANNEL_COMMAND_DISPATCH.update({
+        "vox": cmd_vox,
+        "toggleauto": cmd_toggleauto,
+        "reset": cmd_reset,
+        "setrange": cmd_setrange,
+        "addmarker": cmd_addmarker,
+        "clearmarkers": cmd_clearmarkers,
+        "setcolormap": cmd_setcolormap,
+        "config": cmd_config,
+        "help": cmd_help,
+        "start": cmd_help,
+    })
 
     # Direct audio — fires when the message itself contains audio
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
@@ -388,6 +426,12 @@ def main() -> None:
             handle_audio_document,
         )
     )
+
+    # Channel post commands (CommandHandler ignores channel_post updates)
+    app.add_handler(MessageHandler(
+        filters.UpdateType.CHANNEL_POSTS & filters.COMMAND,
+        _handle_channel_post_command,
+    ))
 
     # Manual trigger
     app.add_handler(CommandHandler("vox", cmd_vox))

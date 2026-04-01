@@ -25,7 +25,7 @@ TELEGRAM_BOT_TOKEN=<your_token> python bot.py
 
 ## Commands
 
-Send these to the bot in DM — settings apply globally.
+Settings apply per-chat — each group or DM has independent settings.
 
 | Command | Description |
 |---|---|
@@ -51,4 +51,3 @@ See [INFRA-README.md](INFRA-README.md) for full infrastructure setup, bootstrap,
 - Auto-spectrogram: on
 - Markers: D2 (74.42 Hz), E3 (164.81 Hz), D4 (293.66 Hz)
 
-test
