@@ -1,9 +1,9 @@
 """
-Download and decode Telegram voice messages.
+Download and decode audio from Telegram messages.
 
-Telegram sends voice as OGG/Opus. We keep the original OGG for use as the
-video's audio track (avoids re-encoding), and convert a copy to WAV so
-librosa can read it for spectrogram computation.
+Telegram sends voice as OGG/Opus. Audio files can be MP3, WAV, FLAC, M4A, AAC,
+or OGG. We keep the original file for use as the video's audio track, and
+convert a copy to WAV so librosa can read it for spectrogram computation.
 """
 
 import logging
@@ -22,29 +22,36 @@ log = logging.getLogger(__name__)
 ANALYSIS_SR = 22050
 
 
-async def download_voice(bot: Bot, file_id: str, dest_dir: str) -> tuple[str, np.ndarray, int]:
+async def download_audio(bot: Bot, file_id: str, dest_dir: str, ext: str = ".ogg") -> tuple[str, np.ndarray, int]:
     """
-    Download a voice message and decode it for analysis.
+    Download any Telegram audio file and decode it for analysis.
+
+    Args:
+        bot:      Telegram Bot instance
+        file_id:  Telegram file_id to download
+        dest_dir: directory to write files into
+        ext:      file extension for the downloaded file (e.g. ".mp3", ".wav")
+                  — used so ffmpeg detects the container format correctly
 
     Returns:
-        ogg_path: path to the original OGG file (used as video audio track)
-        samples:  mono float32 numpy array of audio samples
-        sr:       sample rate of the returned samples
+        audio_path: path to the original downloaded file (used as video audio track)
+        samples:    mono float32 numpy array of audio samples
+        sr:         sample rate of the returned samples
     """
-    ogg_path = os.path.join(dest_dir, "voice.ogg")
-    wav_path = os.path.join(dest_dir, "voice.wav")
+    audio_path = os.path.join(dest_dir, f"audio{ext}")
+    wav_path = os.path.join(dest_dir, "audio.wav")
 
-    log.info("Downloading voice file %s", file_id)
+    log.info("Downloading file %s (ext=%s)", file_id, ext)
     tg_file = await bot.get_file(file_id)
-    await tg_file.download_to_drive(ogg_path)
+    await tg_file.download_to_drive(audio_path)
 
-    # OGG Opus is not supported by soundfile/libsndfile, so we decode via
-    # ffmpeg (which we require for video assembly anyway).
-    log.info("Decoding OGG to WAV")
+    # Decode to WAV via ffmpeg for librosa — handles OGG/Opus, MP3, FLAC,
+    # WAV, M4A/AAC, and any other ffmpeg-supported container.
+    log.info("Decoding %s to WAV", ext)
     subprocess.run(
         [
             "ffmpeg", "-y",
-            "-i", ogg_path,
+            "-i", audio_path,
             "-ar", str(ANALYSIS_SR),
             "-ac", "1",  # mono
             wav_path,
@@ -55,4 +62,4 @@ async def download_voice(bot: Bot, file_id: str, dest_dir: str) -> tuple[str, np
 
     samples, sr = librosa.load(wav_path, sr=None, mono=True)
     log.info("Loaded audio: %.2f s at %d Hz", len(samples) / sr, sr)
-    return ogg_path, samples, sr
+    return audio_path, samples, sr
