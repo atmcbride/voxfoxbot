@@ -1,0 +1,4 @@
+aws_region       = "us-east-1"
+key_name         = "my-keypair"
+tg_bot_token     = "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+allowed_ssh_cidr = "203.0.113.0/32"

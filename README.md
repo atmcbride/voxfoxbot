@@ -36,6 +36,10 @@ Send these to the bot in DM — settings apply globally.
 | `/setcolormap <name>` | Change colour palette (magma, inferno, viridis, plasma, turbo) |
 | `/help` | Show help message |
 
+## Deploy to AWS
+
+See [INFRA-README.md](INFRA-README.md) for full infrastructure setup, bootstrap, and CI details.
+
 ## Defaults
 
 - Frequency range: 70–4000 Hz
