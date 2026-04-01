@@ -179,24 +179,33 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     message = update.effective_message
     if not message:
         return
+    cfg = config.get()
+    if not cfg.get("auto_spectrogram", True):
+        return
     log.info("Voice message received (%.1fs)", message.voice.duration)
-    await _process_message_audio(message, message, config.get(), context.bot)
+    await _process_message_audio(message, message, cfg, context.bot)
 
 
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if not message:
         return
+    cfg = config.get()
+    if not cfg.get("auto_spectrogram", True):
+        return
     log.info("Audio file received")
-    await _process_message_audio(message, message, config.get(), context.bot)
+    await _process_message_audio(message, message, cfg, context.bot)
 
 
 async def handle_audio_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if not message:
         return
+    cfg = config.get()
+    if not cfg.get("auto_spectrogram", True):
+        return
     log.info("Audio document received")
-    await _process_message_audio(message, message, config.get(), context.bot)
+    await _process_message_audio(message, message, cfg, context.bot)
 
 
 # ---------------------------------------------------------------------------
@@ -276,16 +285,41 @@ async def cmd_setcolormap(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
 
 
+async def cmd_toggleauto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    cfg = config.get()
+    new_value = not cfg.get("auto_spectrogram", True)
+    config.update(auto_spectrogram=new_value)
+    state = "ON" if new_value else "OFF"
+    await update.effective_message.reply_text(
+        f"Auto-spectrogram is now {state}.\n"
+        + ("Audio messages will be processed automatically." if new_value
+           else "Use /vox or @mention to trigger manually.")
+    )
+
+
+async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    config.reset()
+    await update.effective_message.reply_text(
+        "Settings reset to defaults.\n"
+        "  Freq range: 70–4000 Hz\n"
+        "  Colormap:   magma\n"
+        "  Auto-spectrogram: ON\n"
+        "  Markers: D2, E3, D4"
+    )
+
+
 async def cmd_config(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cfg = config.get()
     marker_lines = "\n".join(
         f"  • {m['freq']} Hz — {m['label']}" for m in cfg["markers"]
     ) or "  (none)"
+    auto = "ON" if cfg.get("auto_spectrogram", True) else "OFF"
     text = (
         f"Current settings:\n"
-        f"  Freq range: {cfg['fmin']}–{cfg['fmax']} Hz\n"
-        f"  Colormap:   {cfg['colormap']}\n"
-        f"  FPS:        {cfg['fps']}\n"
+        f"  Freq range:      {cfg['fmin']}–{cfg['fmax']} Hz\n"
+        f"  Colormap:        {cfg['colormap']}\n"
+        f"  FPS:             {cfg['fps']}\n"
+        f"  Auto-spectrogram:{auto}\n"
         f"  Markers:\n{marker_lines}"
     )
     await update.effective_message.reply_text(text)
@@ -299,11 +333,14 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "  • Audio files: MP3, WAV, FLAC, M4A, AAC, OGG\n\n"
         "How to trigger:\n"
         "  • Send/forward any supported audio — bot replies automatically\n"
+        "    (when auto-spectrogram is ON)\n"
         "  • Reply to any audio message with /vox\n"
         "  • Reply to any audio message and @mention the bot\n\n"
         "Commands (use in DM — settings apply globally):\n"
         "  /vox                  — run on a replied-to audio message\n"
+        "  /toggleauto           — toggle automatic spectrogram on/off\n"
         "  /config               — show current settings\n"
+        "  /reset                — reset all settings to defaults\n"
         "  /setrange <min> <max> — set frequency range in Hz\n"
         "  /addmarker <hz> [lbl] — add a horizontal reference line\n"
         "  /clearmarkers         — remove all reference lines\n"
@@ -354,6 +391,8 @@ def main() -> None:
     app.add_handler(CommandHandler("vox", cmd_vox))
 
     # Config commands
+    app.add_handler(CommandHandler("toggleauto", cmd_toggleauto))
+    app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("setrange", cmd_setrange))
     app.add_handler(CommandHandler("addmarker", cmd_addmarker))
     app.add_handler(CommandHandler("clearmarkers", cmd_clearmarkers))

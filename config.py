@@ -8,6 +8,7 @@ DEFAULTS: dict = {
     "fmax": 4000,
     "colormap": "magma",
     "fps": 30,
+    "auto_spectrogram": True,
     "markers": [
         {"freq": 74.42, "label": "D2"},
         {"freq": 164.81, "label": "E3"},
@@ -37,3 +38,7 @@ def update(**kwargs) -> None:
     current = _load()
     current.update(kwargs)
     _save(current)
+
+
+def reset() -> None:
+    _save({})

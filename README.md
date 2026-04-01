@@ -29,7 +29,10 @@ Send these to the bot in DM — settings apply globally.
 
 | Command | Description |
 |---|---|
+| `/vox` | Run spectrogram on a replied-to audio message |
+| `/toggleauto` | Toggle automatic spectrogram conversion on/off |
 | `/config` | Show current settings |
+| `/reset` | Reset all settings to defaults |
 | `/setrange <fmin> <fmax>` | Set frequency range in Hz |
 | `/addmarker <hz> [label]` | Add a horizontal reference line at a frequency |
 | `/clearmarkers` | Remove all reference lines |
@@ -45,6 +48,7 @@ See [INFRA-README.md](INFRA-README.md) for full infrastructure setup, bootstrap,
 - Frequency range: 70–4000 Hz
 - Colormap: magma
 - FPS: 30
+- Auto-spectrogram: on
 - Markers: D2 (74.42 Hz), E3 (164.81 Hz), D4 (293.66 Hz)
 
 test
