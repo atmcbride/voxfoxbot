@@ -19,8 +19,12 @@ Usage:
 
 import logging
 import os
+import random
+import re
 import tempfile
 import time
+
+import urllib.request
 
 from telegram import Message, Update
 from telegram.ext import (
@@ -358,6 +362,29 @@ async def cmd_config(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.effective_message.reply_text(text)
 
 
+_harvard_sentences: list[str] = []
+
+
+def _load_harvard_sentences() -> list[str]:
+    global _harvard_sentences
+    if _harvard_sentences:
+        return _harvard_sentences
+    with urllib.request.urlopen("https://harvardsentences.com/", timeout=10) as resp:
+        html = resp.read().decode("utf-8")
+    _harvard_sentences = re.findall(r"<li>([^<]+)</li>", html)
+    return _harvard_sentences
+
+
+async def cmd_harvardsentence(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Return a random Harvard sentence."""
+    try:
+        sentences = _load_harvard_sentences()
+        await update.effective_message.reply_text(random.choice(sentences))
+    except Exception as e:
+        log.exception("Failed to fetch Harvard sentences")
+        await update.effective_message.reply_text(f"Couldn't fetch a sentence: {e}")
+
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(
         "VoxFox — voice message spectrograph bot\n\n"
@@ -380,6 +407,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "  /addmarker <hz> [lbl] — add a horizontal reference line\n"
         "  /clearmarkers         — remove all reference lines\n"
         "  /setcolormap <name>   — change colour palette\n"
+        "  /harvardsentence      — print a random Harvard sentence\n"
         "  /help                 — this message"
     )
 
@@ -444,6 +472,7 @@ def main() -> None:
         "config": cmd_config,
         "help": cmd_help,
         "start": cmd_help,
+        "harvardsentence": cmd_harvardsentence,
     })
 
     # Direct audio/video — fires when the message itself contains audio or video
@@ -486,6 +515,7 @@ def main() -> None:
     app.add_handler(CommandHandler("config", cmd_config))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("start", cmd_help))
+    app.add_handler(CommandHandler("harvardsentence", cmd_harvardsentence))
 
     log.info("Bot started. Polling for updates...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
