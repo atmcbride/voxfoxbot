@@ -38,6 +38,7 @@ from telegram.ext import (
 import audio
 import config
 import spectrogram
+import stats
 import video
 
 logging.basicConfig(
@@ -164,6 +165,8 @@ async def _process_message_audio(
     status = await reply_target.reply_text("Processing spectrogram...")
     t_start = time.monotonic()
 
+    user_id = reply_target.from_user.id if reply_target.from_user else None
+
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = await _run_spectrogram(bot, file_id, ext, cfg, tmpdir)
@@ -177,6 +180,7 @@ async def _process_message_audio(
                     ),
                 )
         await status.delete()
+        stats.record_user(user_id)
 
     except Exception as e:
         log.exception("Failed to process audio")
@@ -385,6 +389,11 @@ async def cmd_harvardsentence(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.effective_message.reply_text(f"Couldn't fetch a sentence: {e}")
 
 
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    count = stats.user_count()
+    await update.effective_message.reply_text(f"Unique users: {count}")
+
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(
         "VoxFox — voice message spectrograph bot\n\n"
@@ -453,6 +462,8 @@ async def post_init(app: Application) -> None:
 
 
 def main() -> None:
+    stats.init()
+
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
         raise SystemExit("TELEGRAM_BOT_TOKEN environment variable is not set.")
@@ -470,6 +481,7 @@ def main() -> None:
         "clearmarkers": cmd_clearmarkers,
         "setcolormap": cmd_setcolormap,
         "config": cmd_config,
+        "stats": cmd_stats,
         "help": cmd_help,
         "start": cmd_help,
         "harvardsentence": cmd_harvardsentence,
@@ -513,6 +525,7 @@ def main() -> None:
     app.add_handler(CommandHandler("clearmarkers", cmd_clearmarkers))
     app.add_handler(CommandHandler("setcolormap", cmd_setcolormap))
     app.add_handler(CommandHandler("config", cmd_config))
+    app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("start", cmd_help))
     app.add_handler(CommandHandler("harvardsentence", cmd_harvardsentence))

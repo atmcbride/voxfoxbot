@@ -1,5 +1,6 @@
 token.txt
 settings.json
+stats.db
 venv/
 __pycache__/
 *.pyc

@@ -31,12 +31,14 @@ Settings apply per-chat — each group or DM has independent settings.
 |---|---|
 | `/vox` | Run spectrogram on a replied-to audio message |
 | `/toggleauto` | Toggle automatic spectrogram conversion on/off |
+| `/togglescale` | Toggle frequency axis between logarithmic and linear |
 | `/config` | Show current settings |
 | `/reset` | Reset all settings to defaults |
 | `/setrange <fmin> <fmax>` | Set frequency range in Hz |
 | `/addmarker <hz> [label]` | Add a horizontal reference line at a frequency |
 | `/clearmarkers` | Remove all reference lines |
-| `/setcolormap <name>` | Change colour palette (magma, inferno, viridis, plasma, turbo) |
+| `/setcolormap <name>` | Change colour palette (magma, inferno, viridis, plasma, turbo, cividis) |
+| `/harvardsentence` | Print a random Harvard sentence for testing audio clarity |
 | `/help` | Show help message |
 
 ## Deploy to AWS
