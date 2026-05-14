@@ -59,7 +59,7 @@ resource "aws_security_group" "voxfoxbot" {
 
 resource "aws_instance" "voxfoxbot" {
   ami           = data.aws_ami.ubuntu.id
-  instance_type = "t3a.medium"
+  instance_type = "t3a.small"
   key_name      = var.key_name
 
   vpc_security_group_ids = [aws_security_group.voxfoxbot.id]
