@@ -37,13 +37,29 @@ jobs:
         id: ip
         run: echo "host=$(tofu output -raw public_ip)" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy to instance
+      - name: Setup SSH key
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/key.pem
           chmod 600 ~/.ssh/key.pem
+
+      - name: Wait for SSH
+        run: |
+          for i in $(seq 1 30); do
+            if ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no -o ConnectTimeout=5 "ubuntu@${{ steps.ip.outputs.host }}" true 2>/dev/null; then
+              echo "SSH ready after ~${i}0s"
+              exit 0
+            fi
+            echo "Waiting for SSH... (attempt $i/30)"
+            sleep 10
+          done
+          echo "SSH not available after 5 minutes"
+          exit 1
+
+      - name: Deploy to instance
+        run: |
           rsync -avz --exclude '.git' --exclude 'venv' --exclude '__pycache__' --exclude '.terraform' --exclude '*.tfstate*' --exclude 'terraform.tfvars' --exclude 'bootstrap' \
             -e "ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no" \
             ./ "ubuntu@${{ steps.ip.outputs.host }}:~/voxfoxbot/"
