@@ -32,6 +32,33 @@ resource "aws_ecr_repository" "voxfoxbot" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
+# The Lambda service pulls the image itself; without this repository policy
+# CreateFunction fails with "Lambda does not have permission to access the
+# ECR image".
+resource "aws_ecr_repository_policy" "lambda_pull" {
+  repository = aws_ecr_repository.voxfoxbot.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "LambdaPull"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action = [
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+      ]
+      Condition = {
+        StringLike = {
+          "aws:sourceArn" = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:*"
+        }
+      }
+    }]
+  })
+}
+
 # --- State: per-chat settings, unique-user stats ---
 
 resource "aws_dynamodb_table" "voxfoxbot" {
@@ -136,7 +163,10 @@ resource "aws_lambda_function" "voxfoxbot" {
     }
   }
 
-  depends_on = [aws_cloudwatch_log_group.voxfoxbot]
+  depends_on = [
+    aws_cloudwatch_log_group.voxfoxbot,
+    aws_ecr_repository_policy.lambda_pull,
+  ]
 
   tags = {
     Project = "voxfoxbot"
