@@ -12,6 +12,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      TF_VAR_tg_bot_token: ${{ secrets.TG_BOT_TOKEN }}
+      TF_VAR_image_tag: ${{ github.sha }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -27,41 +31,30 @@ jobs:
       - name: Tofu Init
         run: tofu init
 
+      # The Lambda function references the image, so the repo must exist and
+      # hold the tag before the full apply.
+      - name: Ensure ECR repository exists
+        run: tofu apply -auto-approve -target=aws_ecr_repository.voxfoxbot
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/voxfoxbot:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
       - name: Tofu Apply
         run: tofu apply -auto-approve
-        env:
-          TF_VAR_key_name: ${{ secrets.KEY_NAME }}
-          TF_VAR_tg_bot_token: ${{ secrets.TG_BOT_TOKEN }}
 
-      - name: Get instance IP
-        id: ip
-        run: echo "host=$(tofu output -raw public_ip)" >> "$GITHUB_OUTPUT"
-
-      - name: Setup SSH key
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Point Telegram at the new deployment
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/key.pem
-          chmod 600 ~/.ssh/key.pem
-
-      - name: Wait for SSH
-        run: |
-          for i in $(seq 1 30); do
-            if ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no -o ConnectTimeout=5 "ubuntu@${{ steps.ip.outputs.host }}" true 2>/dev/null; then
-              echo "SSH ready after ~${i}0s"
-              exit 0
-            fi
-            echo "Waiting for SSH... (attempt $i/30)"
-            sleep 10
-          done
-          echo "SSH not available after 5 minutes"
-          exit 1
-
-      - name: Deploy to instance
-        run: |
-          rsync -avz --exclude '.git' --exclude 'venv' --exclude '__pycache__' --exclude '.terraform' --exclude '*.tfstate*' --exclude 'terraform.tfvars' --exclude 'bootstrap' \
-            -e "ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no" \
-            ./ "ubuntu@${{ steps.ip.outputs.host }}:~/voxfoxbot/"
-          ssh -i ~/.ssh/key.pem -o StrictHostKeyChecking=no "ubuntu@${{ steps.ip.outputs.host }}" \
-            'sudo cp ~/voxfoxbot/voxfoxbot.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now voxfoxbot && sudo systemctl restart voxfoxbot'
+          URL=$(tofu output -raw webhook_url)
+          SECRET=$(tofu output -raw webhook_secret)
+          curl -fsS "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/setWebhook" \
+            -d "url=${URL}" \
+            -d "secret_token=${SECRET}" \
+            -d 'allowed_updates=["message","channel_post"]' \
+            | grep -q '"ok":true'

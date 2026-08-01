@@ -229,6 +229,141 @@ resource "aws_iam_role_policy" "ci_ec2" {
   })
 }
 
+resource "aws_iam_role_policy" "ci_lambda_stack" {
+  name = "voxfoxbot-ci-lambda-stack"
+  role = aws_iam_role.ci.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "EcrAuth"
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Sid    = "EcrRepo"
+        Effect = "Allow"
+        Action = [
+          "ecr:CreateRepository",
+          "ecr:DeleteRepository",
+          "ecr:DescribeRepositories",
+          "ecr:ListTagsForResource",
+          "ecr:TagResource",
+          "ecr:UntagResource",
+          "ecr:GetRepositoryPolicy",
+          "ecr:GetLifecyclePolicy",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:DescribeImages",
+          "ecr:BatchDeleteImage",
+        ]
+        Resource = "arn:aws:ecr:us-east-1:*:repository/voxfoxbot"
+      },
+      {
+        Sid    = "LambdaFunction"
+        Effect = "Allow"
+        Action = [
+          "lambda:CreateFunction",
+          "lambda:DeleteFunction",
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
+          "lambda:GetFunctionCodeSigningConfig",
+          "lambda:UpdateFunctionCode",
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:AddPermission",
+          "lambda:RemovePermission",
+          "lambda:GetPolicy",
+          "lambda:CreateFunctionUrlConfig",
+          "lambda:GetFunctionUrlConfig",
+          "lambda:UpdateFunctionUrlConfig",
+          "lambda:DeleteFunctionUrlConfig",
+          "lambda:PutFunctionEventInvokeConfig",
+          "lambda:GetFunctionEventInvokeConfig",
+          "lambda:UpdateFunctionEventInvokeConfig",
+          "lambda:DeleteFunctionEventInvokeConfig",
+          "lambda:ListVersionsByFunction",
+          "lambda:ListTags",
+          "lambda:TagResource",
+          "lambda:UntagResource",
+        ]
+        Resource = "arn:aws:lambda:us-east-1:*:function:voxfoxbot"
+      },
+      {
+        Sid    = "LambdaExecRole"
+        Effect = "Allow"
+        Action = [
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:GetRole",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:PutRolePolicy",
+          "iam:GetRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:ListInstanceProfilesForRole",
+        ]
+        Resource = "arn:aws:iam::*:role/voxfoxbot-lambda"
+      },
+      {
+        Sid      = "LambdaExecRolePass"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = "arn:aws:iam::*:role/voxfoxbot-lambda"
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "lambda.amazonaws.com"
+          }
+        }
+      },
+      {
+        Sid    = "Dynamo"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:CreateTable",
+          "dynamodb:DeleteTable",
+          "dynamodb:DescribeTable",
+          "dynamodb:UpdateTable",
+          "dynamodb:ListTagsOfResource",
+          "dynamodb:TagResource",
+          "dynamodb:UntagResource",
+          "dynamodb:DescribeContinuousBackups",
+          "dynamodb:DescribeTimeToLive",
+        ]
+        Resource = "arn:aws:dynamodb:us-east-1:*:table/voxfoxbot"
+      },
+      {
+        Sid    = "Logs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:DeleteLogGroup",
+          "logs:PutRetentionPolicy",
+          "logs:TagResource",
+          "logs:UntagResource",
+          "logs:ListTagsForResource",
+        ]
+        Resource = "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/voxfoxbot*"
+      },
+      {
+        Sid      = "LogsDescribe"
+        Effect   = "Allow"
+        Action   = "logs:DescribeLogGroups"
+        Resource = "arn:aws:logs:us-east-1:*:log-group:*"
+      },
+    ]
+  })
+}
+
 # --- Outputs ---
 
 output "ci_role_arn" {

@@ -10,10 +10,12 @@ The bot must be added as an administrator of the target channel with
   - /vox replied to any of the above
   - @voxfoxbot mention in a reply to any of the above
 
-Configuration is per-chat (settings.json keyed by chat_id) — use commands
-in any chat to configure settings for that chat.
+Configuration is per-chat (DynamoDB in production, settings.json locally) —
+use commands in any chat to configure settings for that chat.
 
-Usage:
+Production runs on AWS Lambda in webhook mode (see lambda_handler.py).
+Running this file directly starts long-polling mode for local development:
+
     TELEGRAM_BOT_TOKEN=<token> python bot.py
 """
 
@@ -441,7 +443,7 @@ async def _handle_channel_post_command(update: Update, context: ContextTypes.DEF
         await fn(update, context)
 
 
-async def post_init(app: Application) -> None:
+async def register_mention_handlers(app: Application) -> None:
     """Register username-dependent handlers after we know the bot's username."""
     me = await app.bot.get_me()
     log.info("Bot username: @%s", me.username)
@@ -461,14 +463,19 @@ async def post_init(app: Application) -> None:
     )
 
 
-def main() -> None:
-    stats.init()
+def build_application(token: str, post_init=None) -> Application:
+    """
+    Build the PTB Application with all handlers wired.
 
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if not token:
-        raise SystemExit("TELEGRAM_BOT_TOKEN environment variable is not set.")
-
-    app = Application.builder().token(token).post_init(post_init).build()
+    Used by both entry points: main() below (long-polling, local development)
+    and lambda_handler.py (webhook mode on AWS Lambda). post_init is only
+    honoured by run_polling; the Lambda path awaits register_mention_handlers
+    explicitly after initialize().
+    """
+    builder = Application.builder().token(token)
+    if post_init is not None:
+        builder = builder.post_init(post_init)
+    app = builder.build()
 
     # Populate channel command dispatch table
     _CHANNEL_COMMAND_DISPATCH.update({
@@ -530,6 +537,15 @@ def main() -> None:
     app.add_handler(CommandHandler("start", cmd_help))
     app.add_handler(CommandHandler("harvardsentence", cmd_harvardsentence))
 
+    return app
+
+
+def main() -> None:
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not token:
+        raise SystemExit("TELEGRAM_BOT_TOKEN environment variable is not set.")
+
+    app = build_application(token, post_init=register_mention_handlers)
     log.info("Bot started. Polling for updates...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
