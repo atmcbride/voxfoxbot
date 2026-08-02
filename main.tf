@@ -2,7 +2,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
     random = {
       source  = "hashicorp/random"
@@ -207,6 +207,17 @@ resource "aws_lambda_permission" "webhook" {
   function_name          = aws_lambda_function.voxfoxbot.function_name
   principal              = "*"
   function_url_auth_type = "NONE"
+}
+
+# Since October 2025, public function URLs additionally require
+# lambda:InvokeFunction scoped to URL-originated calls — without this second
+# statement every request gets a service-level 403.
+resource "aws_lambda_permission" "webhook_invoke_function" {
+  statement_id             = "AllowInvokeViaFunctionUrl"
+  action                   = "lambda:InvokeFunction"
+  function_name            = aws_lambda_function.voxfoxbot.function_name
+  principal                = "*"
+  invoked_via_function_url = true
 }
 
 # --- Outputs ---
