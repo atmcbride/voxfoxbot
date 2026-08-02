@@ -256,6 +256,8 @@ resource "aws_iam_role_policy" "ci_lambda_stack" {
           "ecr:SetRepositoryPolicy",
           "ecr:DeleteRepositoryPolicy",
           "ecr:GetLifecyclePolicy",
+          "ecr:PutLifecyclePolicy",
+          "ecr:DeleteLifecyclePolicy",
           "ecr:BatchCheckLayerAvailability",
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",

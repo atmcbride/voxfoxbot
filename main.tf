@@ -32,6 +32,25 @@ resource "aws_ecr_repository" "voxfoxbot" {
   }
 }
 
+# Every deploy pushes a ~1.5 GB image; without expiry ECR storage grows
+# forever at $0.10/GB-month.
+resource "aws_ecr_lifecycle_policy" "voxfoxbot" {
+  repository = aws_ecr_repository.voxfoxbot.name
+
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "keep only the 5 most recent images"
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 5
+      }
+      action = { type = "expire" }
+    }]
+  })
+}
+
 data "aws_caller_identity" "current" {}
 
 # The Lambda service pulls the image itself; without this repository policy
